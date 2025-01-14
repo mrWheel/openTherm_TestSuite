@@ -1,0 +1,4 @@
+WiFiManager
+milesburton/DallasTemperature@^3.11.0
+https://github.com/mrWheel/esp-networking.git
+https://github.com/ihormelnyk/opentherm_library.git

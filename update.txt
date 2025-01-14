@@ -1,0 +1,14 @@
+The debug prints are not showing in telnet because:
+
+The networking->loop() function is never called in the main loop of openThermSlave_Demo.cpp.
+
+This loop() function is required to:
+1. Handle new telnet connections
+2. Check for disconnected clients
+3. Keep the telnet connection alive
+
+To fix, add this line in the main loop():
+networking->loop();
+
+Right after:
+ot.process();

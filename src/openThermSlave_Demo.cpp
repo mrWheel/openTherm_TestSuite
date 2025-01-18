@@ -14,8 +14,9 @@ Stream* debug = nullptr;
 bool gotRequest = false;
 uint32_t requestCounter = 0;
 
-const int inPin  = 12;  //-- for Arduino, 12 for ESP8266 (D6), 19 for ESP32
-const int outPin = 13;  //-- for Arduino, 13 for ESP8266 (D7), 23 for ESP32
+const int inPin  = _SLAVE_IN_PIN;  //-- for Arduino, 12 for ESP8266 (D6), 19 for ESP32
+const int outPin = _SLAVE_OUT_PIN;  //-- for Arduino, 13 for ESP8266 (D7), 23 for ESP32
+
 OpenTherm ot(inPin, outPin, true);
 
 void IRAM_ATTR handleInterrupt()
@@ -53,17 +54,20 @@ void processRequest(unsigned long request, OpenThermResponseStatus status)
                     // data |= 0x80; //electricity production on
 
                     response = ot.buildResponse(OpenThermMessageType::READ_ACK, id, data);
+                    debug->printf("send READ_ACK, data[%s]\n", String(data, HEX).c_str());
                     break;
                 }
       case OpenThermMessageID::TSet:
                 {
                     response = ot.buildResponse(OpenThermMessageType::WRITE_ACK, id, data);
+                    debug->printf("send WRITE_ACK, data[%s]\n", String(data, HEX).c_str());
                     break;
                 }
       case OpenThermMessageID::Tboiler:
       {
                     data = ot.temperatureToData(45);
                     response = ot.buildResponse(OpenThermMessageType::READ_ACK, id, data);
+                    debug->printf("send READ_ACK, data[%s]\n", String(data, HEX).c_str());
                     break;
       }
       default:

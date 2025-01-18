@@ -1,28 +1,12 @@
-File: src/jprausMaster.cpp
 
-Error Analysis:
-- CORRUPT HEAP error occurs during OpenTherm::listen() call
-- Backtrace shows memory corruption in timer interrupt handling
-- Issue starts at line 45: OPENTHERM::listen(BOILER_IN, 800)
-- Pin definitions are incorrect (using wrong pins)
-- Missing proper interrupt cleanup in state transitions
-- Missing proper pin initialization sequence
-- Missing yield() calls for ESP32 task management
-- Using jpraus OpenTherm library on ESP32-S3 which may have timer/interrupt conflicts
+#include <opentherm.h>
 
-Required Changes:
-1. Fix pin definitions to match self-test configuration
-2. Add proper pin initialization in setup
-3. Add interrupt cleanup in all state transitions
-4. Add error handling for listen call
-5. Add yield() for ESP32 task management
-6. Add delay after stop() to ensure timer resources are freed
+// OpenTherm Monitor board
+#define BOILER_IN   _MASTER_IN_PIN
+#define BOILER_OUT  _MASTER_IN_PIN
 
-Code Changes:
-```cpp
-// Fix pin definitions
-#define BOILER_IN   _MASTER_IN_PIN     // GPIO9 from platformio.ini
-#define BOILER_OUT  _MASTER_OUT_PIN    // GPIO5 from platformio.ini
+
+OpenthermData message;
 
 // Forward declarations
 void handleListenComplete();
@@ -52,16 +36,19 @@ void handleListenComplete()
     stateCleanupNeeded = true;
 }
 
-// In setup()
+
+void setup() 
+{
   Serial.begin(115200);
   while (!Serial) { delay(10); }
   delay(2000);
   Serial.println("\n\nLets get started ...\n");
+  delay(2000);
 
   pinMode(BOILER_IN, INPUT);
-  digitalWrite(BOILER_IN, HIGH);    // pull up
-  digitalWrite(BOILER_OUT, LOW);    // Initial state
-  pinMode(BOILER_OUT, OUTPUT);      // low output = high voltage
+  digitalWrite(BOILER_IN, HIGH); // pull up
+  digitalWrite(BOILER_OUT, HIGH);
+  pinMode(BOILER_OUT, OUTPUT); // low output = high voltage, high output = low voltage
 
   // Initial state
   OPENTHERM::stop();
@@ -69,9 +56,16 @@ void handleListenComplete()
   isListening = false;
   lastStateChange = millis();
 
-// In loop()
+}
+
+/**
+ * Loop will act as thermostat (master) connected to Opentherm boiler.
+ * It will request slave configration from boiler every 100ms or so and waits for response from boiler.
+ */
+void loop() 
+{
   unsigned long now = millis();
-  
+
   // Ensure minimum time between state changes
   if (now - lastStateChange < STATE_COOLDOWN) {
     yield();
@@ -126,4 +120,4 @@ void handleListenComplete()
     lastStateChange = now;
   }
   yield();
-```
+}

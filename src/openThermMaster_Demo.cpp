@@ -39,8 +39,8 @@ DallasTemperature sensors(&oneWire);
 
 uint32_t delayTimer = 0;
 
-const int inPin  = 4; //-- for Arduino, 4 for ESP8266 (D2), 21 for ESP32
-const int outPin = 5; //-- for Arduino, 5 for ESP8266 (D1), 22 for ESP32
+const int inPin  = _MASTER_IN_PIN; //-- for Arduino, 4 for ESP8266 (D2), 21 for ESP32
+const int outPin = _MASTER_OUT_PIN; //-- for Arduino, 5 for ESP8266 (D1), 22 for ESP32
 OpenTherm ot(inPin, outPin);
 
 void IRAM_ATTR handleInterrupt()
@@ -76,9 +76,10 @@ void setup()
     }
     
     // Start up the library
-    sensors.begin();
+    //sensors.begin();
 
     ot.begin(handleInterrupt); // for ESP ot.begin(); without interrupt handler can be used
+  //ot.begin(); // crashes
 }
 
 void loop()
@@ -99,7 +100,7 @@ void loop()
 
     unsigned long response = ot.setBoilerStatus(enableCentralHeating, enableHotWater, enableCooling);
     OpenThermResponseStatus responseStatus = ot.getLastResponseStatus();
-    if (responseStatus == OpenThermResponseStatus::SUCCESS)
+    //if (responseStatus == OpenThermResponseStatus::SUCCESS)
     {
         debug->println("Central Heating: " + String(ot.isCentralHeatingActive(response) ? "on" : "off"));
         debug->println("Hot Water: " + String(ot.isHotWaterActive(response) ? "on" : "off"));
@@ -134,8 +135,9 @@ void loop()
 
     debug->println();
     delayTimer = millis();
-    while(millis() - delayTimer < 2000)
+    while(millis() - delayTimer < 1000)
     {
+      yield();
       networking->loop();
     }
 }

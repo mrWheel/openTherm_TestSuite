@@ -22,14 +22,18 @@ but since GPIO6-GPIO11 are typically used to interface with the flash memory ICs
 #include <Arduino.h>
 #include <OpenTherm.h>
 
-const int inPin   = _SLAVE_IN_PIN;
-const int outPin  = _SLAVE_OUT_PIN;
-
-OpenTherm ot(inPin, outPin);
+#ifdef ESP32S3
+  const int inPin   = _BOILER_IN_PIN;
+  const int outPin  = _BOILER_OUT_PIN;
+#else
+  const int inPin   = _MASTER_IN_PIN;
+  const int outPin  = _MASTER_OUT_PIN;
+#endif
+OpenTherm mOT(inPin, outPin);
 
 void IRAM_ATTR handleInterrupt()
 {
-    ot.handleInterrupt();
+    mOT.handleInterrupt();
 }
 
 void setup()
@@ -37,11 +41,13 @@ void setup()
     Serial.begin(115200);
     delay(5000);
     Serial.println("\n\nStart the Master\n");
-
+#ifdef ESP32S3
     pinMode(_RELAIS_DRIVE_PIN, OUTPUT);
     digitalWrite(_RELAIS_DRIVE_PIN, HIGH);
+    pinMode(_SIGNAL_LED_B_PIN, OUTPUT);
+#endif
 
-    ot.begin(handleInterrupt); // for ESP ot.begin(); without interrupt handler can be used
+    mOT.begin(handleInterrupt); // for ESP mOT.begin(); without interrupt handler can be used
 }
 
 
@@ -51,39 +57,69 @@ void loop()
     bool enableCentralHeating = true;
     bool enableHotWater = true;
     bool enableCooling = false;
-    unsigned long response = ot.setBoilerStatus(enableCentralHeating, enableHotWater, enableCooling);
-    OpenThermResponseStatus responseStatus = ot.getLastResponseStatus();
+    unsigned long response = mOT.setBoilerStatus(enableCentralHeating, enableHotWater, enableCooling);
+    OpenThermResponseStatus responseStatus = mOT.getLastResponseStatus();
+#ifdef ESP32S3
+        digitalWrite(_SIGNAL_LED_B_PIN, mOT.isCentralHeatingActive(response) ? HIGH : LOW);
+#endif
     if (responseStatus == OpenThermResponseStatus::SUCCESS)
     {
-        Serial.println("Central Heating: " + String(ot.isCentralHeatingActive(response) ? "on" : "off"));
-        Serial.println("Hot Water: " + String(ot.isHotWaterActive(response) ? "on" : "off"));
-        Serial.println("Flame: " + String(ot.isFlameOn(response) ? "on" : "off"));
+        Serial.println("Central Heating: " + String(mOT.isCentralHeatingActive(response) ? "on" : "off"));
+        Serial.println("Hot Water: " + String(mOT.isHotWaterActive(response) ? "on" : "off"));
+        Serial.println("Flame: " + String(mOT.isFlameOn(response) ? "on" : "off"));
     }
     if (responseStatus == OpenThermResponseStatus::NONE)
     {
         Serial.println("Error: OpenTherm is not initialized");
+#ifdef ESP32S3
+        for(int i=0; i<5; i++)
+        {
+          digitalWrite(_SIGNAL_LED_B_PIN, HIGH);
+          delay(100);
+          digitalWrite(_SIGNAL_LED_B_PIN, LOW);
+          delay(100);
+        }
+#endif
     }
     else if (responseStatus == OpenThermResponseStatus::INVALID)
     {
         Serial.println("Error: Invalid response " + String(response, HEX));
+#ifdef ESP32S3
+        for(int i=0; i<5; i++)
+        {
+          digitalWrite(_SIGNAL_LED_B_PIN, HIGH);
+          delay(100);
+          digitalWrite(_SIGNAL_LED_B_PIN, LOW);
+          delay(100);
+        }
+#endif
     }
     else if (responseStatus == OpenThermResponseStatus::TIMEOUT)
     {
         Serial.println("Error: Response timeout");
+#ifdef ESP32S3
+        for(int i=0; i<10; i++)
+        {
+          digitalWrite(_SIGNAL_LED_B_PIN, HIGH);
+          delay(100);
+          digitalWrite(_SIGNAL_LED_B_PIN, LOW);
+          delay(100);
+        }
+#endif
     }
 
     // Set Boiler Temperature to 64 degrees C
-    ot.setBoilerTemperature(64);
+    mOT.setBoilerTemperature(64);
 
     // Get Boiler Temperature
-    float ch_temperature = ot.getBoilerTemperature();
+    float ch_temperature = mOT.getBoilerTemperature();
     Serial.println("CH temperature is " + String(ch_temperature) + " degrees C");
 
     // Set DHW setpoint to 40 degrees C
-    ot.setDHWSetpoint(40);
+    mOT.setDHWSetpoint(40);
 
     // Get DHW Temperature
-    float dhw_temperature = ot.getDHWTemperature();
+    float dhw_temperature = mOT.getDHWTemperature();
     Serial.println("DHW temperature is " + String(dhw_temperature) + " degrees C");
 
     Serial.println();

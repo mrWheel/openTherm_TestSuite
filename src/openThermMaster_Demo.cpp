@@ -39,13 +39,18 @@ DallasTemperature sensors(&oneWire);
 
 uint32_t delayTimer = 0;
 
-const int inPin  = _MASTER_IN_PIN; //-- for Arduino, 4 for ESP8266 (D2), 21 for ESP32
-const int outPin = _MASTER_OUT_PIN; //-- for Arduino, 5 for ESP8266 (D1), 22 for ESP32
-OpenTherm ot(inPin, outPin);
+const int inPin  = _MASTER_IN_PIN;  //-- ESP8266 (D2)
+const int outPin = _MASTER_OUT_PIN; //--  ESP8266 (D1)
+OpenTherm mOT(inPin, outPin);
+
+bool enableCentralHeating = false;
+bool enableHotWater = true;
+bool enableCooling = false;
+
 
 void IRAM_ATTR handleInterrupt()
 {
-    ot.handleInterrupt();
+    mOT.handleInterrupt();
 }
 
 void setup()
@@ -56,11 +61,11 @@ void setup()
     Serial.println("Lets get Started ..");
 
     networking = new Networking();
-    #ifdef ESP8266
-        debug = networking->begin("OT_Thermostat", 0, Serial, 115200);
-    #else
-        #error "only esp8266 supported"
-    #endif
+    //#ifdef ESP8266
+        debug = networking->begin("otMaster", 0, Serial, 115200);
+    //#else
+    //    #error "only esp8266 supported"
+    //#endif
     
     if (!debug) 
     {
@@ -71,40 +76,37 @@ void setup()
     //-- Example of using the IP methods
     if (networking->isConnected()) 
     {
-        debug->print("Thermostat IP: ");
+        debug->print("Master (Thermostat)IP: ");
         debug->println(networking->getIPAddressString());
     }
     
     // Start up the library
-    //sensors.begin();
+    sensors.begin();
 
-    ot.begin(handleInterrupt); // for ESP ot.begin(); without interrupt handler can be used
-  //ot.begin(); // crashes
+    mOT.begin(handleInterrupt); // for ESP mOT.begin(); without interrupt handler can be used
+  //mOT.begin(); // crashes
 }
 
 void loop()
 {
     // Set/Get Boiler Status
-    bool enableCentralHeating = true;
-    bool enableHotWater = true;
+    enableCentralHeating = !enableCentralHeating;
     bool enableCooling = false;
 
     // request to all devices on the bus
-    /****
     debug->print("DS18B20 temperature...");
     sensors.requestTemperatures(); 
     float temperatureC = sensors.getTempCByIndex(0);
     debug->print(temperatureC);
     debug->println("ºC ");
-    ****/
 
-    unsigned long response = ot.setBoilerStatus(enableCentralHeating, enableHotWater, enableCooling);
-    OpenThermResponseStatus responseStatus = ot.getLastResponseStatus();
-    //if (responseStatus == OpenThermResponseStatus::SUCCESS)
+    unsigned long response = mOT.setBoilerStatus(enableCentralHeating, enableHotWater, enableCooling);
+    OpenThermResponseStatus responseStatus = mOT.getLastResponseStatus();
+    if (responseStatus == OpenThermResponseStatus::SUCCESS)
     {
-        debug->println("Central Heating: " + String(ot.isCentralHeatingActive(response) ? "on" : "off"));
-        debug->println("Hot Water: " + String(ot.isHotWaterActive(response) ? "on" : "off"));
-        debug->println("Flame: " + String(ot.isFlameOn(response) ? "on" : "off"));
+        debug->println("Central Heating: " + String(mOT.isCentralHeatingActive(response) ? "on" : "off"));
+        debug->println("Hot Water: " + String(mOT.isHotWaterActive(response) ? "on" : "off"));
+        debug->println("Flame: " + String(mOT.isFlameOn(response) ? "on" : "off"));
     }
     if (responseStatus == OpenThermResponseStatus::NONE)
     {
@@ -120,17 +122,17 @@ void loop()
     }
 
     // Set Boiler Temperature to 64 degrees C
-    ot.setBoilerTemperature(64);
+    mOT.setBoilerTemperature((int)(temperatureC *2));
 
     // Get Boiler Temperature
-    float ch_temperature = ot.getBoilerTemperature();
+    float ch_temperature = mOT.getBoilerTemperature();
     debug->println("CH temperature is " + String(ch_temperature) + " degrees C");
 
     // Set DHW setpoint to 40 degrees C
-    ot.setDHWSetpoint(40);
+    mOT.setDHWSetpoint(40);
 
     // Get DHW Temperature
-    float dhw_temperature = ot.getDHWTemperature();
+    float dhw_temperature = mOT.getDHWTemperature();
     debug->println("DHW temperature is " + String(dhw_temperature) + " degrees C");
 
     debug->println();
@@ -139,5 +141,9 @@ void loop()
     {
       yield();
       networking->loop();
+      enableHotWater = !enableHotWater;
+
     }
+    debug->print("Master (Thermostat) IP: ");
+    debug->println(networking->getIPAddressString());
 }

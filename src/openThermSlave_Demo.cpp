@@ -9,13 +9,14 @@ http://ihormelnyk.com
 #include <OpenTherm.h>
 #include "Networking.h"
 
-Networking* networking = nullptr;
-Stream* debug = nullptr;
-bool gotRequest = false;
+Networking* networking  = nullptr;
+Stream* debug           = nullptr;
+bool gotRequest         = false;
 uint32_t requestCounter = 0;
-
-const int inPin  = _SLAVE_IN_PIN;  //-- for Arduino, 12 for ESP8266 (D6), 19 for ESP32
-const int outPin = _SLAVE_OUT_PIN;  //-- for Arduino, 13 for ESP8266 (D7), 23 for ESP32
+uint32_t delayTimer = millis();
+    
+const int inPin  = _SLAVE_IN_PIN;   //--  ESP8266 12 (D6), otMonitor 4 for ESP32
+const int outPin = _SLAVE_OUT_PIN;  //--  ESP8266 13 (D7), otMonitor 8 for ESP32
 
 OpenTherm ot(inPin, outPin, true);
 
@@ -27,7 +28,10 @@ void IRAM_ATTR handleInterrupt()
 void processRequest(unsigned long request, OpenThermResponseStatus status)
 {
     gotRequest = true;
-    debug->println("T" + String(request, HEX)); //-- master/thermostat request
+    debug->print("T" + String(request, HEX)); //-- master/thermostat request
+    if (request == 0)
+          debug->println(" No connection?");
+    else  debug->println();
 
     unsigned long response = 0;
     OpenThermMessageID id = ot.getDataID(request);
@@ -54,20 +58,20 @@ void processRequest(unsigned long request, OpenThermResponseStatus status)
                     // data |= 0x80; //electricity production on
 
                     response = ot.buildResponse(OpenThermMessageType::READ_ACK, id, data);
-                    debug->printf("send READ_ACK, data[%s]\n", String(data, HEX).c_str());
+                    //debug->printf("send READ_ACK, data[%s]\n", String(data, HEX).c_str());
                     break;
                 }
       case OpenThermMessageID::TSet:
                 {
                     response = ot.buildResponse(OpenThermMessageType::WRITE_ACK, id, data);
-                    debug->printf("send WRITE_ACK, data[%s]\n", String(data, HEX).c_str());
+                    //debug->printf("send WRITE_ACK, data[%s]\n", String(data, HEX).c_str());
                     break;
                 }
       case OpenThermMessageID::Tboiler:
       {
                     data = ot.temperatureToData(45);
                     response = ot.buildResponse(OpenThermMessageType::READ_ACK, id, data);
-                    debug->printf("send READ_ACK, data[%s]\n", String(data, HEX).c_str());
+                    //debug->printf("send READ_ACK, data[%s]\n", String(data, HEX).c_str());
                     break;
       }
       default:
@@ -92,11 +96,11 @@ void setup()
     Serial.println("Lets get Started ..");
 
     networking = new Networking();
-    #ifdef ESP8266
-        debug = networking->begin("OT_Boiler", 0, Serial, 115200);
-    #else
-        #error "only esp8266 supported"
-    #endif
+  #ifdef ESP8266
+        debug = networking->begin("otSlave", 0, Serial, 115200);
+  #else
+        debug = networking->begin("otSlave", _KNX_MODE_SW_PIN, Serial, 115200);
+  #endif
     
     if (!debug) 
     {
@@ -107,17 +111,26 @@ void setup()
     //-- Example of using the IP methods
     if (networking->isConnected()) 
     {
-        debug->print("Boiler IP: ");
+        debug->print("Slave (Boiler) IP: ");
         debug->println(networking->getIPAddressString());
     }
     
     ot.begin(handleInterrupt, processRequest); 
 //  ot.begin(processRequest);
-
+    
+    delayTimer = millis();
+    
 }
 
 void loop()
 {
     ot.process();
     networking->loop();
+    if (millis() - delayTimer > 10000)
+    {
+        delayTimer = millis();
+        debug->print("Slave (Boiler) IP: ");
+        debug->println(networking->getIPAddressString());
+    }
+
 }

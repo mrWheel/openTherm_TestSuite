@@ -1,129 +1,18 @@
-File: src/jprausMaster.cpp
+NEOPIXEL Issue:
+The pin configuration (_NEOPIXEL_PIN=48) is correct for the built-in NeoPixel on ESP32-S3-DevKitC.
 
-Error Analysis:
-- CORRUPT HEAP error occurs during OpenTherm::listen() call
-- Backtrace shows memory corruption in timer interrupt handling
-- Issue starts at line 45: OPENTHERM::listen(BOILER_IN, 800)
-- Pin definitions are incorrect (using wrong pins)
-- Missing proper interrupt cleanup in state transitions
-- Missing proper pin initialization sequence
-- Missing yield() calls for ESP32 task management
-- Using jpraus OpenTherm library on ESP32-S3 which may have timer/interrupt conflicts
+Test this code modification in blinkNeopixels():
 
-Required Changes:
-1. Fix pin definitions to match self-test configuration
-2. Add proper pin initialization in setup
-3. Add interrupt cleanup in all state transitions
-4. Add error handling for listen call
-5. Add yield() for ESP32 task management
-6. Add delay after stop() to ensure timer resources are freed
-
-Code Changes:
-```cpp
-// Fix pin definitions
-#define BOILER_IN   _MASTER_IN_PIN     // GPIO9 from platformio.ini
-#define BOILER_OUT  _MASTER_OUT_PIN    // GPIO5 from platformio.ini
-
-// Forward declarations
-void handleListenComplete();
-void cleanupState();
-
-// Global state tracking
-static bool isListening = false;
-static unsigned long lastStateChange = 0;
-static const unsigned long STATE_COOLDOWN = 100; // ms between state changes
-static volatile bool stateCleanupNeeded = false;
-
-// Helper function
-void cleanupState() 
+void blinkNeopixels()
 {
-    if (isListening || stateCleanupNeeded) {
-        OPENTHERM::stop();
-        delay(50);  // Increased delay for cleanup
-        isListening = false;
-        stateCleanupNeeded = false;
-        yield();
-    }
+  if (millis() > neopixelTimer)
+  {
+    neopixelTimer = millis() + DELAY_NOPIXELS;
+    strip.setBrightness(255);  // Full brightness
+    strip.setPixelColor(0, strip.Color(255, 0, 0));  // Bright RED
+    strip.show();
+    delay(300);
+    strip.setPixelColor(0, strip.Color(0, 0, 0));    // OFF
+    strip.show();
+  }
 }
-
-// Callback handler
-void handleListenComplete()
-{
-    stateCleanupNeeded = true;
-}
-
-// In setup()
-  Serial.begin(115200);
-  while (!Serial) { delay(10); }
-  delay(2000);
-  Serial.println("\n\nLets get started ...\n");
-
-  pinMode(BOILER_IN, INPUT);
-  digitalWrite(BOILER_IN, HIGH);    // pull up
-  digitalWrite(BOILER_OUT, LOW);    // Initial state
-  pinMode(BOILER_OUT, OUTPUT);      // low output = high voltage
-
-  // Initial state
-  OPENTHERM::stop();
-  delay(100);  // Allow timer resources to be freed
-  isListening = false;
-  lastStateChange = millis();
-
-// In loop()
-  unsigned long now = millis();
-  
-  // Ensure minimum time between state changes
-  if (now - lastStateChange < STATE_COOLDOWN) {
-    yield();
-    return;
-  }
-
-  // Handle any pending cleanup first
-  if (stateCleanupNeeded) {
-    cleanupState();
-    lastStateChange = now;
-    return;
-  }
-
-  if (OPENTHERM::isIdle()) 
-  {
-    cleanupState();
-    message.type = OT_MSGTYPE_READ_DATA;
-    message.id = OT_MSGID_SLAVE_CONFIG;
-    message.valueHB = 0;
-    message.valueLB = 0;
-    Serial.print(F("-> ")); 
-    OPENTHERM::printToSerial(message); 
-    Serial.println();
-    OPENTHERM::send(BOILER_OUT, message);
-    lastStateChange = now;
-  }
-  else if (OPENTHERM::isSent() && !isListening) 
-  {
-    cleanupState();
-    OPENTHERM::listen(BOILER_IN, 800, handleListenComplete);
-    isListening = true;
-    lastStateChange = now;
-  }
-  else if (OPENTHERM::getMessage(message))
-  {
-    OPENTHERM::stop();
-    delay(20);  // Allow timer resources to be freed
-    isListening = false;
-    Serial.print(F("<- "));
-    OPENTHERM::printToSerial(message);
-    Serial.println();
-    Serial.println();
-    delay(100);
-    lastStateChange = now;
-  }
-  else if (OPENTHERM::isError()) 
-  {
-    cleanupState();
-    Serial.println(F("<- Timeout"));
-    Serial.println();
-    delay(1000);  // Longer delay on error
-    lastStateChange = now;
-  }
-  yield();
-```

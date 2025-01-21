@@ -66,11 +66,15 @@ void blinkNeopixels()
 
 void processRequest(unsigned long request, OpenThermResponseStatus status)
 {
-    Serial.println("T" + String(request, HEX)); // master/thermostat request
+    //-- master/thermostat request
+  //Serial.println("Termostat request: " + String(request, HEX)); 
+    Serial.printf("Termostat request: x%08x\n", request); 
     unsigned long response = mOT.sendRequest(request);
     if (response)
     {
-        Serial.println("B" + String(response, HEX)); // slave/boiler response
+        //-- slave/boiler response
+      //Serial.println("Boiler response  : " + String(response, HEX)); 
+        Serial.printf("Boiler response  : x%08x\n", response); 
         sOT.sendResponse(response);
     }
 }

@@ -40,6 +40,35 @@ void IRAM_ATTR sHandleInterrupt()
     sOT.handleInterrupt();
 }
 
+//-- OTA callback functions
+void onOTAStart()
+{
+    debug->println("Custom OTA Start Handler: Preparing for update...");
+    debug->println("Switch off relays..");
+    digitalWrite(_RELAIS_DRIVE_PIN, LOW);
+    digitalWrite(_WDT_FEED_PIN, LOW);
+    for (int i = 0; i < NUM_LEDS; i++) 
+    {
+      strip.setBrightness(50);
+      // Set the pixel color to black
+      strip.setPixelColor(i, strip.Color(0, 0, 0));
+    }
+    strip.show();
+
+}
+
+void onOTAProgress()
+{
+    debug->println("Custom OTA Progress Handler: Another 10% completed");
+    digitalWrite(_WDT_FEED_PIN, !digitalRead(_WDT_FEED_PIN));
+}
+
+void onOTAEnd()
+{
+    debug->println("Custom OTA End Handler: Update process finishing...");
+    digitalWrite(_WDT_FEED_PIN, LOW);
+}
+
 
 /**
  * Updates the NeoPixel strip with random colors for each LED if the specified delay has passed.
@@ -54,7 +83,8 @@ void blinkNeopixels()
   {
     neopixelTimer = millis() + DELAY_NOPIXELS;
     // Randomly change the color of each pixel
-    for (int i = 0; i < NUM_LEDS; i++) {
+    for (int i = 0; i < NUM_LEDS; i++) 
+    {
       // Generate random values for Red, Green, and Blue
       uint8_t red = random(0, 256);
       uint8_t green = random(0, 256);
@@ -169,6 +199,13 @@ void setup()
     {
       Serial.println("We have 'debug'!!");
     }
+
+    //-- Register OTA callbacks
+    networking->doAtStartOTA(onOTAStart);
+    networking->doAtProgressOTA(onOTAProgress);
+    networking->doAtEndOTA(onOTAEnd);
+    
+
     //-- Example of using the IP methods
     if (networking->isConnected()) 
     {

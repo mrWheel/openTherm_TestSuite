@@ -8,6 +8,11 @@ http://ihormelnyk.com
 #include <Arduino.h>
 #include <OpenTherm.h>
 #include <Adafruit_NeoPixel.h>
+#include <Networking.h>
+#include "myCredentials.dat"
+
+Networking* networking = nullptr;
+Stream* debug = nullptr;
 
 const int mInPin  = _BOILER_IN_PIN;
 const int mOutPin = _BOILER_OUT_PIN;
@@ -22,8 +27,8 @@ OpenTherm sOT(sInPin, sOutPin, true);
 //-- Create a NeoPixel object
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, _NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
-uint32_t  checkTimer = 0;
-uint32_t neopixelTimer;
+uint32_t  feedWatchDogTimer = 0;
+uint32_t  neopixelTimer;
 
 void IRAM_ATTR mHandleInterrupt()
 {
@@ -67,14 +72,14 @@ void blinkNeopixels()
 void processRequest(unsigned long request, OpenThermResponseStatus status)
 {
     //-- master/thermostat request
-  //Serial.println("Termostat request: " + String(request, HEX)); 
-    Serial.printf("Termostat request: x%08x\n", request); 
+  //debug->println("Termostat request: " + String(request, HEX)); 
+    debug->printf("Termostat request: x%08x\n", request); 
     unsigned long response = mOT.sendRequest(request);
     if (response)
     {
         //-- slave/boiler response
-      //Serial.println("Boiler response  : " + String(response, HEX)); 
-        Serial.printf("Boiler response  : x%08x\n", response); 
+      //debug->println("Boiler response  : " + String(response, HEX)); 
+        debug->printf("Boiler response  : x%08x\n", response); 
         sOT.sendResponse(response);
     }
 }
@@ -82,7 +87,7 @@ void processRequest(unsigned long request, OpenThermResponseStatus status)
 
 void checkComminucation()
 {
-  Serial.println("\r\n\ncheckCommunication ...");
+  debug->println("\r\n\ncheckCommunication ...");
     bool enableCentralHeating = false;
     bool enableHotWater = false;
     bool enableCooling = false;
@@ -90,21 +95,21 @@ void checkComminucation()
     OpenThermResponseStatus responseStatus = mOT.getLastResponseStatus();
     if (responseStatus == OpenThermResponseStatus::SUCCESS)
     {
-        Serial.println("Central Heating: " + String(mOT.isCentralHeatingActive(response) ? "on" : "off"));
-        Serial.println("Hot Water: " + String(mOT.isHotWaterActive(response) ? "on" : "off"));
-        Serial.println("Flame: " + String(mOT.isFlameOn(response) ? "on" : "off"));
+        debug->println("Central Heating: " + String(mOT.isCentralHeatingActive(response) ? "on" : "off"));
+        debug->println("Hot Water: " + String(mOT.isHotWaterActive(response) ? "on" : "off"));
+        debug->println("Flame: " + String(mOT.isFlameOn(response) ? "on" : "off"));
     }
     if (responseStatus == OpenThermResponseStatus::NONE)
     {
-        Serial.println("Error: OpenTherm is not initialized");
+        debug->println("Error: OpenTherm is not initialized");
     }
     else if (responseStatus == OpenThermResponseStatus::INVALID)
     {
-        Serial.println("Error: Invalid response " + String(response, HEX));
+        debug->println("Error: Invalid response " + String(response, HEX));
     }
     else if (responseStatus == OpenThermResponseStatus::TIMEOUT)
     {
-        Serial.println("Error: Response timeout");
+        debug->println("Error: Response timeout");
     }
 
     // Set Boiler Temperature to 64 degrees C
@@ -112,16 +117,16 @@ void checkComminucation()
 
     // Get Boiler Temperature
     float ch_temperature = mOT.getBoilerTemperature();
-    Serial.println("CH temperature is " + String(ch_temperature) + " degrees C");
+    debug->println("CH temperature is " + String(ch_temperature) + " degrees C");
 
     // Set DHW setpoint to 40 degrees C
     mOT.setDHWSetpoint(40);
 
     // Get DHW Temperature
     float dhw_temperature = mOT.getDHWTemperature();
-    Serial.println("DHW temperature is " + String(dhw_temperature) + " degrees C");
+    debug->println("DHW temperature is " + String(dhw_temperature) + " degrees C");
 
-    Serial.println();
+    debug->println();
 }
 
 
@@ -133,6 +138,7 @@ void setup()
     Serial.println("Lets get going ....");
 
     pinMode(_KNX_MODE_SW_PIN, INPUT);
+    pinMode(_WDT_FEED_PIN, OUTPUT);
     pinMode(_RELAIS_DRIVE_PIN, OUTPUT);
     digitalWrite(_RELAIS_DRIVE_PIN, HIGH);
 
@@ -142,6 +148,33 @@ void setup()
     //-- Set all pixels to off
     strip.show();
 
+    Serial.println("Connect WiFi...");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(mySSID, mySSIDpassword);
+    int count = 0;
+    while (WiFi.status() != WL_CONNECTED && (count < 5)) 
+    {
+      Serial.print('.');
+      delay(100);
+      count++;
+    }
+
+    networking = new Networking();
+    #ifdef ESP8266
+        debug = networking->begin("otGateway8266", 0, Serial, 115200);
+    #else
+        debug = networking->begin("otGateway32", 0, Serial, 115200);
+    #endif
+    if (debug) 
+    {
+      Serial.println("We have 'debug'!!");
+    }
+    //-- Example of using the IP methods
+    if (networking->isConnected()) 
+    {
+        debug->printf("Device IP: %s\r\n\n", networking->getIPAddressString().c_str());
+    }
+
     mOT.begin(mHandleInterrupt); // for ESP ot.begin(); without interrupt handler can be used
     sOT.begin(sHandleInterrupt, processRequest);
 }
@@ -149,12 +182,19 @@ void setup()
 void loop()
 {
     sOT.process();
-
+    networking->loop();
+    
     blinkNeopixels();
 
     if (digitalRead(_KNX_MODE_SW_PIN) == LOW)
     {
-      Serial.println("KNX_MNode Switch is LOW");
+      debug->println("KNX_MNode Switch is LOW");
       while(digitalRead(_KNX_MODE_SW_PIN) == LOW) { delay(10); }
+    }
+
+    if (millis() > feedWatchDogTimer)
+    {
+      feedWatchDogTimer = millis() + 2500;
+      digitalWrite(_WDT_FEED_PIN, !digitalRead(_WDT_FEED_PIN));
     }
 }

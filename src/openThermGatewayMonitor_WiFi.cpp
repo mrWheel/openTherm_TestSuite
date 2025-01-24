@@ -41,6 +41,12 @@ void IRAM_ATTR sHandleInterrupt()
 }
 
 //-- OTA callback functions
+/**
+ * Called when the OTA update process starts.
+ * 
+ * This implementation prints a message to the serial console, switches off the relays, and
+ * sets the NeoPixel strip to black.
+ */
 void onOTAStart()
 {
     debug->println("Custom OTA Start Handler: Preparing for update...");
@@ -57,12 +63,24 @@ void onOTAStart()
 
 }
 
+/**
+ * Called during the OTA update process whenever another 10% of the firmware has been received.
+ * 
+ * This implementation simply prints a message to the serial console and toggles the watchdog
+ * feed pin.
+ */
 void onOTAProgress()
 {
     debug->println("Custom OTA Progress Handler: Another 10% completed");
     digitalWrite(_WDT_FEED_PIN, !digitalRead(_WDT_FEED_PIN));
 }
 
+/**
+ * Called once the OTA update process has finished.
+ * 
+ * This implementation simply prints a message to the serial console and switches off the
+ * watchdog feed pin.
+ */
 void onOTAEnd()
 {
     debug->println("Custom OTA End Handler: Update process finishing...");
@@ -99,6 +117,18 @@ void blinkNeopixels()
   
 } // blinkNeopixels()
 
+/**
+ * Processes a request from the master/thermostat and sends it to the boiler.
+ * 
+ * This function takes a request from the master/thermostat, logs the request, 
+ * and sends it to the boiler via the OpenTherm interface. If a response is received 
+ * from the boiler, it logs the response and sends it back to the master/thermostat.
+ *
+ * @param request The request from the master/thermostat, represented as an 
+ *                unsigned long integer.
+ * @param status  The status of the OpenTherm response, represented as an 
+ *                OpenThermResponseStatus enum.
+ */
 void processRequest(unsigned long request, OpenThermResponseStatus status)
 {
     //-- master/thermostat request
@@ -115,6 +145,10 @@ void processRequest(unsigned long request, OpenThermResponseStatus status)
 }
 
 
+/**
+ * Checks the communication with the boiler by setting a status and temperature
+ * and logging the responses.
+ */
 void checkComminucation()
 {
   debug->println("\r\n\ncheckCommunication ...");

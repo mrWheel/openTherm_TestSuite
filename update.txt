@@ -1,0 +1,28 @@
+Partition Table Analysis:
+
+1. Memory Alignment Issue:
+- Partition 'otadata' starts at 0xe000 which is not 4KB aligned
+- Partition 'coredump' starts at 0x10000 which is correctly aligned
+- Partition 'phy_init' starts at 0x11000 which is not 4KB aligned
+
+2. Size Issues:
+- nvs partition (0x5000 = 20KB) is small for storing WiFi credentials and other data
+- coredump partition (0x1000 = 4KB) is too small for meaningful crash dumps
+- phy_init (0x1000 = 4KB) is smaller than recommended
+
+3. OTA Partitions:
+- app0 and app1 are equal size (0x300000 = 3MB) which is correct
+- Total app space is 6MB
+
+4. SPIFFS:
+- spiffs size is 0x1D0000 (1.8MB)
+- Ends at 0x7F0000, leaving unused space
+
+Recommended fixes:
+# Name,   Type, SubType,    Offset,     Size
+nvs,      data, nvs,        0x9000,     0x6000
+otadata,  data, ota,        0x10000,    0x2000
+phy_init, data, phy,        0x12000,    0x2000
+app0,     app,  ota_0,      0x20000,    0x300000
+app1,     app,  ota_1,      0x320000,   0x300000
+spiffs,   data, spiffs,     0x620000,   0x1E0000

@@ -213,7 +213,7 @@ void setup()
     strip.show();
 
     Serial.println("Connect WiFi...");
-    WiFi.mode(WIFI_STA);
+    /****    WiFi.mode(WIFI_STA);
     WiFi.begin(mySSID, mySSIDpassword);
     int count = 0;
     while (WiFi.status() != WL_CONNECTED && (count < 5)) 
@@ -222,7 +222,7 @@ void setup()
       delay(100);
       count++;
     }
-
+    ****/
     networking = new Networking();
     #ifdef ESP8266
         debug = networking->begin("otGateway8266", 0, Serial, 115200);
